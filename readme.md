@@ -57,23 +57,22 @@ Each color is an object with the following fields:
 
 ### Numeric Precision
 
-All numeric values in the color components array must be stored with a maximum of 4 decimal places, using banker's rounding (round-half-to-even) when needed. For example, 0.12345 becomes 0.1235, while 0.12350 rounds to 0.1235 (nearest even). This applies to both RGB components and opacity.
+All numeric values in the color components array must be stored with a maximum of 5 decimal places, using banker's rounding (round-half-to-even) when needed. For example, 0.123456 becomes 0.12346, while 0.123450 rounds to 0.12344 (nearest even). This applies to both RGB components and opacity.
 
-#### Why 4 Decimal Places?
+#### Why 5 Decimal Places?
 
-- Provides up to 10000 distinct values per component (0 to 10000).
-- Exceeds human color perception capabilities.
-- Matches or exceeds most display technology precision.
-- Sufficient for HDR and professional color work.
-- Enables reliable color deduplication and comparison.
-- Preserves color identity through format conversions and rounding errors.
+- **HDR precision**: Delivers ~19.9 effective bits over 0-10 range (vs ~16.6 with 4 decimals), exceeding 12-bit perceptually lossless encoding standard (ITU-R Rec. 2100).
+- **Industry alignment**: Matches FP16/scRGB precision (Windows DWM), OpenEXR workflows, and ICC profile conversions.
+- **Future-proof**: Handles 12-bit+ displays and 10,000+ nit brightness ranges.
+- **Conversion accuracy**: Minimizes rounding error through color space transformations.
+- **Reliable deduplication**: Enables precise color comparison across workflows.
 
 #### Implementation Considerations
 
 - Use banker's rounding to prevent statistical bias.
 - Perform calculations at full precision.
 - Apply rounding only for final storage or display.
-- Validate that stored values never exceed 4 decimal places.
+- Validate that stored values never exceed 5 decimal places.
 
 #### Example (Swift)
 
@@ -96,8 +95,8 @@ extension Double {
 }
 
 let number = 3.14159265359
-number.rounded(toPlaces: 4)
-//=> 3.1416
+number.rounded(toPlaces: 5)
+//=> 3.14159
 ```
 
 ## Format
@@ -196,11 +195,11 @@ The same color space as [sRGB](https://en.wikipedia.org/wiki/SRGB) but with two 
 
 ### What is gamma correction?
 
-Standard sRGB uses a non-linear encoding to match human perception. This format uses raw linear values instead - better for color computations but requires conversion (gamma correction) for display.
+Standard sRGB uses a nonlinear encoding to pack color into 8-bit more efficiently—shifting precision toward dark tones, where the eye is more sensitive. This format uses linear values for accurate color math, so gamma correction is needed when converting to or from sRGB.
 
 ### Why extended sRGB?
 
-- Allows values outside 0-1 range for HDR and wide-gamut colors.
+- Allows values outside 0-1 range for wide-gamut colors.
 - Simple extension of familiar sRGB.
 - Easy to clamp to standard sRGB when needed.
 
@@ -220,3 +219,7 @@ CMYK is output-dependent and requires device-specific ICC profiles. This format 
 ### Does the format support gradients?
 
 No, only flat colors are supported.
+
+## License
+
+The [MIT license](license) applies to the specification itself. You may freely implement this specification without including or referencing the license.
