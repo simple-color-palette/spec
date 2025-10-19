@@ -1,4 +1,5 @@
 {
+	"$id": "https://simplecolorpalette.com/schema/0.1/schema.json",
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"title": "Simple Color Palette",
 	"description": "A minimal JSON-based format for defining color palettes",
@@ -11,12 +12,12 @@
 	"properties": {
 		"name": {
 			"type": "string",
-			"description": "Optional name of the palette. If omitted, use filename without extension",
+			"description": "Optional palette name; if omitted, use filename without extension",
 			"minLength": 1
 		},
 		"colors": {
 			"type": "array",
-			"description": "Array of color entries",
+			"description": "Ordered list of colors; order must be preserved",
 			"minItems": 1,
 			"items": {
 				"type": "object",
@@ -32,7 +33,8 @@
 					},
 					"components": {
 						"type": "array",
-						"description": "RGB or RGBA color components in extended linear sRGB color space",
+						"$comment": "Values defined at 1e-5 resolution; round (nearest-even) then clamp opacity",
+						"description": "RGB(A) in extended linear sRGB (D65). Values may be <0 or >1. Opacity clamped to [0,1] after rounding.",
 						"minItems": 3,
 						"maxItems": 4,
 						"items": false,
@@ -40,30 +42,30 @@
 							{
 								"type": "number",
 								"title": "red",
-								"description": "Red color component (can be negative or > 1 for HDR)"
+								"description": "Red component (extended-range)"
 							},
 							{
 								"type": "number",
 								"title": "green",
-								"description": "Green color component (can be negative or > 1 for HDR)"
+								"description": "Green component (extended-range)"
 							},
 							{
 								"type": "number",
 								"title": "blue",
-								"description": "Blue color component (can be negative or > 1 for HDR)"
+								"description": "Blue component (extended-range)"
 							},
 							{
 								"type": "number",
 								"title": "opacity",
-								"description": "Opacity (defaults to 1 if omitted)",
-								"minimum": 0,
-								"maximum": 1
+								"default": 1,
+								"description": "Opacity (defaults to 1 if omitted, clamped to [0,1] by readers)"
 							}
 						],
 						"examples": [
 							[1, 0.1274, 0.418],
 							[0.592, 0.278, 0.996, 0.9],
-							[-0.2, 1.5, 2.0, 0.5]
+							[-0.2, 1.5, 2.0],
+							[0.5, 0.5, 0.5, 1.2]
 						]
 					}
 				}

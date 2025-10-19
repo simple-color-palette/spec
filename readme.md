@@ -2,7 +2,7 @@
 
 > A minimal JSON-based file format for defining color palettes
 
-It uses [extended linear sRGB](#what-is-extended-linear-srgb) with optional opacity.
+It uses [extended linear sRGB](#color-space) with optional opacity.
 
 [Learn more ›](https://simplecolorpalette.com)
 
@@ -40,39 +40,65 @@ It uses [extended linear sRGB](#what-is-extended-linear-srgb) with optional opac
 
 ### Top-level Object
 
-- `name`: Optional. String. Name of the palette. If omitted, use the filename without extension.
-- `colors`: Required. Array of color entries.
+- `name`: Optional. String. Name of the palette. If omitted, use the filename without extension. When present, `name` must be non-empty.
+- `colors`: Required. Array of color entries. Must contain at least one color. The order is significant and must be preserved.
+
+No other top-level fields are allowed.
 
 ### Color Entry
 
-Each color is an object with the following fields:
+Each color is an object:
 
-- `name`: Optional. String.
-- `components`: Required. Array of 3 or 4 floating-point numbers.
-	- `[red, green, blue]` or `[red, green, blue, opacity]`
-	- The color should use extended linear sRGB color space.
-	- The color components can be negative and more than 1.
-	- The opacity defaults to 1 if omitted.
-	- The opacity should be clamped to `0...1` range when reading and writing the palette. It should not throw if outside the range.
+- `name`: Optional. String. When present, `name` must be non-empty.
+- `components`: Required. Array of 3 or 4 floating-point numbers: `[red, green, blue]` or `[red, green, blue, opacity]`.
+	- RGB: **Extended linear sRGB (D65)** (values may be <0 or >1; never clamped).
+	- Opacity: Defaults to 1. Clamped to [0, 1] after rounding.
+
+No other color fields are allowed.
+
+### Color Space
+
+**Extended linear sRGB (D65)**: sRGB primaries, D65 white point, linear transfer (identity). "Extended" means values may be <0 or >1; no clipping.
+
+Reference: IEC 61966-2-2 (scRGB, linear variant).
+
+#### Implementation Mapping
+
+- **Apple**: `kCGColorSpaceExtendedLinearSRGB` (not `kCGColorSpaceExtendedSRGB`)
+- **ICC/CMS**: ICC v4 profile with sRGB primaries, D65 white, linear TRC
+- **Web/CSS**: `color(srgb-linear r g b / a)`; values may be outside [0,1]
 
 ### Numeric Precision
 
-All numeric values in the color components array must be stored with a maximum of 5 decimal places, using banker's rounding (round-half-to-even) when needed. For example, 0.123456 becomes 0.12346, while 0.123450 rounds to 0.12344 (nearest even). This applies to both RGB components and opacity.
+Values are defined at a resolution of **1×10⁻⁵**. This is a **quantization rule**, not a formatting requirement:
+
+- **Writers MUST** round all component values to the nearest-even 5-decimal-place step before writing (banker's rounding). For example: 0.123456 → 0.12346, 0.123445 → 0.12344 (nearest even).
+- **Readers MUST** accept arbitrary precision (including values with >5 decimal places or in scientific notation like `1e-5`) and **SHOULD** quantize internally to 1×10⁻⁵ resolution for consistency.
+- Validators should not reject files with >5 decimal places; this rule applies to writers, not interchange validation.
+
+#### Edge Cases
+
+- Ties round to even: `0.123445 → 0.12344`, `0.123455 → 0.12346`
+- Negative values: `-0.000015 → -0.00002`
+- Scientific notation accepted: `1e-5` is valid
+- Out-of-range opacity example: `[0.5, 0.5, 0.5, 1.2]` is interpreted as `[0.5, 0.5, 0.5, 1.0]` after rounding and clamping
 
 #### Why 5 Decimal Places?
 
-- **HDR precision**: Delivers ~19.9 effective bits over 0-10 range (vs ~16.6 with 4 decimals), exceeding 12-bit perceptually lossless encoding standard (ITU-R Rec. 2100).
-- **Industry alignment**: Matches FP16/scRGB precision (Windows DWM), OpenEXR workflows, and ICC profile conversions.
+- **HDR precision**: Delivers ~19.9 effective bits over 0–10 range (vs ~16.6 with 4 decimals), exceeding 12-bit perceptually lossless encoding standard (ITU-R Rec. 2100).
+- **Industry alignment**: Comparable step size to FP16 workflows, OpenEXR, and ICC profile conversions around typical 0–10 working range.
 - **Future-proof**: Handles 12-bit+ displays and 10,000+ nit brightness ranges.
-- **Conversion accuracy**: Minimizes rounding error through color space transformations.
+- **Conversion accuracy**: Minimizes rounding error accumulation through color space transformations.
 - **Reliable deduplication**: Enables precise color comparison across workflows.
 
-#### Implementation Considerations
+#### Canonicalization Pipeline
 
-- Use banker's rounding to prevent statistical bias.
-- Perform calculations at full precision.
-- Apply rounding only for final storage or display.
-- Validate that stored values never exceed 5 decimal places.
+When writing color values, follow this order:
+
+1. Perform color calculations at full precision.
+2. Round all components (RGB and opacity) to 5 decimal places using banker's rounding.
+3. Clamp opacity to [0, 1] range (RGB components are never clamped).
+4. Write to JSON.
 
 #### Example (Swift)
 
@@ -104,6 +130,10 @@ number.rounded(toPlaces: 5)
 ### File Extension
 
 `.color-palette`
+
+### File Encoding
+
+UTF-8 without BOM.
 
 ### MIME Type
 
@@ -187,30 +217,29 @@ extension UTType {
 - Avoiding the complexity of color space conversion and management.
 - Color space conversion is better handled at the app level when needed.
 
-### What is “extended linear sRGB”?
-
-The same color space as [sRGB](https://en.wikipedia.org/wiki/SRGB) but with two differences:
-1. Extended: Values can go beyond 0-1 for HDR colors.
-1. Linear: Raw RGB values without [gamma correction](https://en.wikipedia.org/wiki/Gamma_correction).
-
 ### What is gamma correction?
 
-Standard sRGB uses a nonlinear encoding to pack color into 8-bit more efficiently—shifting precision toward dark tones, where the eye is more sensitive. This format uses linear values for accurate color math, so gamma correction is needed when converting to or from sRGB.
+Standard sRGB uses nonlinear encoding to pack color into 8 bits efficiently, shifting precision toward dark tones where the eye is more sensitive. This format uses linear values for accurate color math, requiring gamma correction when converting to/from standard sRGB.
 
-### Why extended sRGB?
+### Why extended linear sRGB (D65)?
 
-- Allows values outside 0-1 range for wide-gamut colors.
-- Simple extension of familiar sRGB.
+- Linear transfer enables accurate color math and blending.
+- Extended range (values <0 or >1) represents wide-gamut and HDR colors.
+- Well-defined by IEC 61966-2-2 (scRGB); platform-neutral.
 - Easy to clamp to standard sRGB when needed.
+- Universal: Single working space sufficient for interchange.
 
 ### Why linear color?
 
-- Eliminates gamma correction ambiguity.
-- More accurate color blending and interpolation.
+Linear color ensures mathematically correct operations:
+- Color mixing and blending produce perceptually accurate results.
+- Alpha compositing works correctly.
+- Image processing operations (blur, scale, etc.) avoid artifacts.
+- Eliminates gamma correction ambiguity during color calculations.
 
-### Why not Display P3 or other color spaces?
+### Why not Display P3?
 
-No benefit over extended sRGB since both can represent the same range of colors.
+Display P3 has wider gamut primaries, but extended linear sRGB (D65) can encode P3 colors via out-of-gamut values (typically negative or >1). A single working space avoids complexity.
 
 ### Why no CMYK support?
 
